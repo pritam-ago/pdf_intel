@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-faiss-cpu
+qdrant-client
 sentence-transformers
 pypdf2
 numpy
