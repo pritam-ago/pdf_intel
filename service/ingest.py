@@ -4,10 +4,15 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
+import uuid
 
 QDRANT_URL = "http://localhost:6333"
 COLLECTION_NAME = "pdf_chunks"
 MODEL_NAME = "all-MiniLM-L6-v2"
+UPLOAD_DIR = "data/uploads"
+
+# Create upload directory if it doesn't exist
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 model = SentenceTransformer(MODEL_NAME)
 qdrant = QdrantClient(url=QDRANT_URL)
@@ -39,38 +44,53 @@ def chunk_text(text, chunk_size=300, overlap=50):
     return chunks
 
 def ingest_pdf(filepath):
-    ensure_collection()
-    filename = os.path.basename(filepath)
-    text = extract_text_from_pdf(filepath)
-    chunks = chunk_text(text)
+    try:
+        ensure_collection()
+        filename = os.path.basename(filepath)
+        text = extract_text_from_pdf(filepath)
+        
+        if not text.strip():
+            raise ValueError("No text could be extracted from the PDF")
+            
+        chunks = chunk_text(text)
+        
+        if not chunks:
+            raise ValueError("No text chunks could be created")
 
-    embeddings = model.encode(chunks, show_progress_bar=True)
-    embeddings = np.array(embeddings).astype("float32")
+        embeddings = model.encode(chunks, show_progress_bar=True)
+        embeddings = np.array(embeddings).astype("float32")
 
-    points = []
-    for i, chunk in enumerate(chunks):
-        points.append(
-            PointStruct(
-                id=None,  # Let Qdrant auto-assign
-                vector=embeddings[i],
-                payload={"text": chunk, "source": filename, "chunk_index": i},
+        points = []
+        for i, chunk in enumerate(chunks):
+            points.append(
+                PointStruct(
+                    id=uuid.uuid4().hex,
+                    vector=embeddings[i],
+                    payload={"text": chunk, "source": filename, "chunk_index": i},
+                )
             )
-        )
 
-    qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
-    return len(points)
+        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+        return len(points)
+    except Exception as e:
+        print(f"Error ingesting PDF {filepath}: {str(e)}")
+        raise
 
 def search(query, k=5):
-    ensure_collection()
-    query_vec = model.encode([query])[0].astype("float32")
-    results = qdrant.search(
-        collection_name=COLLECTION_NAME,
-        query_vector=query_vec,
-        limit=k,
-    )
-    output = []
-    for r in results:
-        payload = r.payload
-        payload["score"] = r.score
-        output.append(payload)
-    return output
+    try:
+        ensure_collection()
+        query_vec = model.encode([query])[0].astype("float32")
+        results = qdrant.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=query_vec,
+            limit=k,
+        )
+        output = []
+        for r in results:
+            payload = r.payload
+            payload["score"] = r.score
+            output.append(payload)
+        return output
+    except Exception as e:
+        print(f"Error searching: {str(e)}")
+        raise

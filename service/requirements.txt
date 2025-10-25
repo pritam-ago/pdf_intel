@@ -1,7 +1,8 @@
-fastapi
-uvicorn
-qdrant-client
-sentence-transformers
-pypdf2
-numpy
-python-multipart
+fastapi>=0.100.0
+uvicorn>=0.20.0
+qdrant-client>=1.6.0
+sentence-transformers>=2.2.0
+PyPDF2>=3.0.0
+numpy>=1.21.0
+python-multipart>=0.0.5
+pydantic>=2.0.0
